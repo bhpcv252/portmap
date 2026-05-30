@@ -21,6 +21,7 @@ func TestAddClaim_NewPort(t *testing.T) {
 	c := r.GetClaim("3000")
 	if c == nil {
 		t.Fatal("expected claim to exist")
+		return
 	}
 	if c.Project != "myapp" || c.Service != "frontend" {
 		t.Errorf("unexpected claim fields: %+v", c)
@@ -143,6 +144,7 @@ func TestGetClaim_Found(t *testing.T) {
 	c := r.GetClaim("3000")
 	if c == nil {
 		t.Fatal("expected claim, got nil")
+		return
 	}
 	if c.Project != "myapp" || c.Service != "frontend" || c.Description != "Next.js dev server" {
 		t.Errorf("unexpected claim fields: %+v", c)

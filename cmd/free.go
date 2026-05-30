@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/bhpcv252/portmap/internal/iohelp"
@@ -23,7 +25,8 @@ func init() {
 
 func runFree(cmd *cobra.Command, args []string) error {
 	port := args[0]
-	if _, err := parsePort(port); err != nil {
+	n, err := parsePort(port)
+	if err != nil {
 		printError(err.Error(), "")
 		return errSilent
 	}
@@ -33,16 +36,33 @@ func runFree(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	claim := r.GetClaim(port)
 	ew := &iohelp.ErrWriter{W: out}
-
+	claim := r.GetClaim(port)
 	if claim == nil {
 		ew.Printf("port %s has no registered claim\n", port)
 		return ew.Err
 	}
 
-	// TODO: will add an active-port check here: if the port is running,
-	// warn and prompt for confirmation unless --force is set
+	// warn if the port is currently active
+	active, ap, err := getDetector().IsActive(n)
+	if err != nil {
+		return err
+	}
+	if active && !freeForce {
+		pid := 0
+		if ap != nil {
+			pid = ap.PID
+		}
+		yes, err := confirm(
+			fmt.Sprintf("port %s is still running (pid %d). release anyway?", port, pid),
+		)
+		if err != nil {
+			return err
+		}
+		if !yes {
+			return nil
+		}
+	}
 
 	r.RemoveClaim(port)
 	if err := r.Save(getRegistryPath()); err != nil {

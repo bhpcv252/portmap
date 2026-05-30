@@ -16,7 +16,8 @@ var checkCmd = &cobra.Command{
 
 func runCheck(cmd *cobra.Command, args []string) error {
 	port := args[0]
-	if _, err := parsePort(port); err != nil {
+	n, err := parsePort(port)
+	if err != nil {
 		printError(err.Error(), "")
 		return errSilent
 	}
@@ -26,33 +27,68 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	active, ap, err := getDetector().IsActive(n)
+	if err != nil {
+		return err
+	}
+
 	nc := display.NoColorEnabled(noColor)
 	claim := r.GetClaim(port)
 
-	// TODO: will add active-port detection here, enabling the running,
-	// unclaimed-active, and conflict states
-
-	if claim == nil {
+	switch {
+	case claim == nil && !active:
+		// free: not claimed, nothing running
 		if err := display.RenderCheck(out, display.CheckInfo{
 			Port:   port,
 			Status: display.StatusFree,
 		}, nc); err != nil {
 			return err
 		}
-		return nil // exit 0: port is free
-	}
+		return nil // exit 0
 
-	if err := display.RenderCheck(out, display.CheckInfo{
-		Port:        port,
-		Project:     claim.Project,
-		Service:     claim.Service,
-		Description: claim.Description,
-		ClaimedAt:   claim.ClaimedAt,
-		Path:        claim.Path,
-		Status:      display.StatusStopped,
-	}, nc); err != nil {
-		return err
-	}
+	case claim == nil && active:
+		// running but not in registry
+		if err := display.RenderCheck(out, display.CheckInfo{
+			Port:    port,
+			PID:     ap.PID,
+			Process: ap.Process,
+			Status:  display.StatusUnclaimed,
+		}, nc); err != nil {
+			return err
+		}
+		return &ExitError{Code: 1}
 
-	return &ExitError{Code: 1} // exit 1: port is claimed
+	case claim != nil && active:
+		// claimed and running
+		// TODO: conflict detection requires stored PID; deferred to a future phase
+		if err := display.RenderCheck(out, display.CheckInfo{
+			Port:        port,
+			Project:     claim.Project,
+			Service:     claim.Service,
+			Description: claim.Description,
+			ClaimedAt:   claim.ClaimedAt,
+			Path:        claim.Path,
+			PID:         ap.PID,
+			Process:     ap.Process,
+			Status:      display.StatusRunning,
+		}, nc); err != nil {
+			return err
+		}
+		return &ExitError{Code: 1}
+
+	default:
+		// claimed but not running.
+		if err := display.RenderCheck(out, display.CheckInfo{
+			Port:        port,
+			Project:     claim.Project,
+			Service:     claim.Service,
+			Description: claim.Description,
+			ClaimedAt:   claim.ClaimedAt,
+			Path:        claim.Path,
+			Status:      display.StatusStopped,
+		}, nc); err != nil {
+			return err
+		}
+		return &ExitError{Code: 1}
+	}
 }

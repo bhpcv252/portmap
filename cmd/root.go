@@ -37,5 +37,7 @@ func init() {
 		freeCmd,
 		lsCmd,
 		checkCmd,
+		killCmd,
+		suggestCmd,
 	)
 }

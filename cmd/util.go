@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
+	"github.com/bhpcv252/portmap/internal/detector"
 	"github.com/bhpcv252/portmap/internal/iohelp"
 	"github.com/bhpcv252/portmap/internal/registry"
 )
@@ -14,7 +17,17 @@ import (
 var (
 	out    io.Writer = os.Stdout
 	errOut io.Writer = os.Stderr
+	in     io.Reader = os.Stdin
 )
+
+var det detector.Detector
+
+func getDetector() detector.Detector {
+	if det != nil {
+		return det
+	}
+	return detector.New()
+}
 
 var errSilent = errors.New("")
 
@@ -30,7 +43,7 @@ func printError(msg, hint string) {
 	if hint != "" {
 		ew.Printf("hint:  %s\n", hint)
 	}
-	// ew.Err is intentionally dropped, we are already in an error path
+	// ew.Err is intentionally dropped
 }
 
 var registryPathOverride string
@@ -57,4 +70,17 @@ func parsePort(s string) (int, error) {
 		return 0, fmt.Errorf("invalid port %q: must be a number between 1 and 65535", s)
 	}
 	return n, nil
+}
+
+func confirm(prompt string) (bool, error) {
+	ew := &iohelp.ErrWriter{W: out}
+	ew.Printf("%s [y/N] ", prompt)
+	if ew.Err != nil {
+		return false, ew.Err
+	}
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(strings.ToLower(line)) == "y", nil
 }

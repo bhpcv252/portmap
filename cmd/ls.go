@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"strconv"
+
 	"github.com/spf13/cobra"
 
 	"github.com/bhpcv252/portmap/internal/display"
@@ -35,19 +37,47 @@ func runLs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// build rows
+	// build a set of active ports
+	activePorts, err := getDetector().ActivePorts()
+	if err != nil {
+		return err
+	}
+	activeMap := make(map[int]struct{}, len(activePorts))
+	for _, ap := range activePorts {
+		activeMap[ap.Port] = struct{}{}
+	}
+
+	// build claimed rows
 	rows := make([]display.Row, 0, len(r.Claims))
-	for port, c := range r.Claims {
+	claimedPorts := make(map[int]bool)
+	for portStr, c := range r.Claims {
 		if lsProject != "" && c.Project != lsProject {
 			continue
 		}
+		port, _ := strconv.Atoi(portStr)
+		claimedPorts[port] = true
+
+		status := display.StatusStopped
+		if _, ok := activeMap[port]; ok {
+			status = display.StatusRunning
+		}
 		rows = append(rows, display.Row{
-			Port:        port,
+			Port:        portStr,
 			Project:     c.Project,
 			Service:     c.Service,
-			Status:      display.StatusStopped, // TODO: populate live status via detector
+			Status:      status,
 			Description: c.Description,
 		})
+	}
+
+	// build unclaimed rows: active ports not in the registry
+	unclaimed := []display.Row{}
+	for _, ap := range activePorts {
+		if !claimedPorts[ap.Port] {
+			unclaimed = append(unclaimed, display.Row{
+				Port: strconv.Itoa(ap.Port),
+			})
+		}
 	}
 
 	// apply filters
@@ -63,11 +93,19 @@ func runLs(cmd *cobra.Command, args []string) error {
 			func(r display.Row) bool { return r.Status == display.StatusStopped },
 		)
 	}
-
-	// --unclaimed shows only active-but-unclaimed ports
-	unclaimed := []display.Row{}
 	if lsUnclaimed {
 		rows = []display.Row{}
+	}
+	if !lsUnclaimed {
+		unclaimed = func() []display.Row {
+			if lsUnclaimed {
+				return unclaimed
+			}
+			if lsActive || lsFree {
+				return []display.Row{} // hide unclaimed when filtering by claimed status
+			}
+			return unclaimed
+		}()
 	}
 
 	nc := display.NoColorEnabled(noColor)

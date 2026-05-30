@@ -1,6 +1,7 @@
 package project
 
 import (
+	"io"
 	"os"
 
 	"github.com/BurntSushi/toml"
@@ -35,4 +36,8 @@ func WriteConfig(path string, cfg *Config) error {
 		return err
 	}
 	return f.Close()
+}
+
+func WriteConfigTo(w io.Writer, cfg *Config) error {
+	return toml.NewEncoder(w).Encode(cfg)
 }

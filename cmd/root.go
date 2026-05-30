@@ -39,5 +39,10 @@ func init() {
 		checkCmd,
 		killCmd,
 		suggestCmd,
+		syncCmd,
+		exportCmd,
+		cleanCmd,
+		initCmd,
+		watchCmd,
 	)
 }

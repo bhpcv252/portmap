@@ -113,4 +113,11 @@ func resetCmdFlags() {
 	noColor = false
 	killYes = false
 	suggestFrom, suggestTo, suggestCount = 3000, 9999, 1
+	syncDryRun, syncForce = false, false
+	exportProject, exportOutput, exportStdout = "", "./portmap.toml", false
+	cleanDryRun, cleanYes = false, false
+	watchProject = ""
+	watchInterval = 5
+	watchNotify = false
+	watchCtxOverride = nil
 }

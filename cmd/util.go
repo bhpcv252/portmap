@@ -11,7 +11,6 @@ import (
 
 	"github.com/bhpcv252/portmap/internal/detector"
 	"github.com/bhpcv252/portmap/internal/iohelp"
-	"github.com/bhpcv252/portmap/internal/registry"
 )
 
 var (
@@ -43,25 +42,6 @@ func printError(msg, hint string) {
 	if hint != "" {
 		ew.Printf("hint:  %s\n", hint)
 	}
-	// ew.Err is intentionally dropped
-}
-
-var registryPathOverride string
-
-func getRegistryPath() string {
-	if registryPathOverride != "" {
-		return registryPathOverride
-	}
-	return registry.DefaultPath()
-}
-
-var cwdOverride string
-
-func getCwd() (string, error) {
-	if cwdOverride != "" {
-		return cwdOverride, nil
-	}
-	return os.Getwd()
 }
 
 func parsePort(s string) (int, error) {

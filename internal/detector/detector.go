@@ -9,4 +9,5 @@ type ActivePort struct {
 	Port    int
 	PID     int
 	Process string
+	CWD     string
 }

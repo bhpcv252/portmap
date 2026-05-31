@@ -6,186 +6,122 @@ import (
 	"testing"
 )
 
-func render(t *testing.T, rows []Row, unclaimed []Row) string {
+func render(t *testing.T, rows []Row) string {
 	t.Helper()
 	var buf strings.Builder
-	if err := RenderTable(&buf, rows, unclaimed, true); err != nil {
+	if err := RenderTable(&buf, rows, true); err != nil {
 		t.Fatalf("RenderTable: %v", err)
 	}
 	return buf.String()
 }
 
-func renderJSON(t *testing.T, rows []Row, unclaimed []Row) string {
+func renderJSON(t *testing.T, rows []Row) string {
 	t.Helper()
 	var buf strings.Builder
-	if err := RenderJSON(&buf, rows, unclaimed); err != nil {
+	if err := RenderJSON(&buf, rows); err != nil {
 		t.Fatalf("RenderJSON: %v", err)
 	}
 	return buf.String()
 }
 
-func TestRenderTable_AllStatuses(t *testing.T) {
-	rows := []Row{
-		{Port: "3000", Project: "myapp", Service: "frontend", Status: StatusRunning},
-		{Port: "3001", Project: "myapp", Service: "api", Status: StatusStopped},
-		{Port: "3002", Project: "myapp", Service: "worker", Status: StatusConflict},
+func TestRenderTable_Empty(t *testing.T) {
+	got := render(t, nil)
+	if !strings.Contains(got, "no active ports") {
+		t.Errorf("expected 'no active ports', got: %q", got)
 	}
-	unclaimed := []Row{{Port: "8080"}}
+}
 
-	got := render(t, rows, unclaimed)
+func TestRenderTable_ShowsData(t *testing.T) {
+	rows := []Row{
+		{Port: "3000", PID: 1234, Process: "node", CWD: "/home/user/myapp"},
+	}
+	got := render(t, rows)
 
-	for _, want := range []string{"● running", "○ stopped", "⚠ conflict", "● running (unclaimed)"} {
+	for _, want := range []string{"3000", "1234", "node", "/home/user/myapp"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected %q in output, got:\n%s", want, got)
 		}
 	}
 }
 
-func TestRenderTable_Empty(t *testing.T) {
-	got := render(t, nil, nil)
-
-	if !strings.Contains(got, "no ports registered") {
-		t.Errorf("expected empty state message, got: %q", got)
-	}
-}
-
-func TestRenderTable_OnlyClaims_NoActive(t *testing.T) {
+func TestRenderTable_Headers(t *testing.T) {
 	rows := []Row{
-		{Port: "3000", Project: "myapp", Service: "frontend", Status: StatusStopped},
-		{Port: "3001", Project: "myapp", Service: "api", Status: StatusStopped},
-		{Port: "3002", Project: "myapp", Service: "worker", Status: StatusStopped},
+		{Port: "3000", PID: 1234, Process: "node"},
 	}
+	got := render(t, rows)
 
-	got := render(t, rows, nil)
-
-	if strings.Contains(got, "Unclaimed") {
-		t.Error("expected no unclaimed section when unclaimed is empty")
-	}
-	if strings.Count(got, "○ stopped") != 3 {
-		t.Errorf("expected 3 stopped rows, got:\n%s", got)
+	for _, header := range []string{"PORT", "PID", "PROCESS", "CWD"} {
+		if !strings.Contains(got, header) {
+			t.Errorf("expected column header %q in output, got:\n%s", header, got)
+		}
 	}
 }
 
-func TestRenderTable_UnclaimedSection(t *testing.T) {
+func TestRenderTable_MultipleRows(t *testing.T) {
 	rows := []Row{
-		{Port: "3000", Project: "myapp", Service: "frontend", Status: StatusStopped},
+		{Port: "3000", PID: 1234, Process: "node", CWD: "/home/user/a"},
+		{Port: "8080", PID: 5678, Process: "python", CWD: "/home/user/b"},
 	}
-	unclaimed := []Row{{Port: "8080"}}
+	got := render(t, rows)
 
-	got := render(t, rows, unclaimed)
-
-	if !strings.Contains(got, "Unclaimed active ports:") {
-		t.Errorf("expected unclaimed section, got:\n%s", got)
-	}
-	if !strings.Contains(got, "8080") {
-		t.Errorf("expected unclaimed port 8080, got:\n%s", got)
+	for _, want := range []string{"3000", "8080", "node", "python"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output, got:\n%s", want, got)
+		}
 	}
 }
 
-func TestRenderTable_NoUnclaimedSection(t *testing.T) {
+func TestRenderTable_ColumnAlignment(t *testing.T) {
 	rows := []Row{
-		{Port: "3000", Project: "myapp", Service: "frontend", Status: StatusStopped},
+		{Port: "80", PID: 1, Process: "nginx"},
+		{Port: "30000", PID: 99999, Process: "python"},
+	}
+	got := render(t, rows)
+	lines := strings.Split(strings.TrimSpace(got), "\n")
+
+	if len(lines) < 3 {
+		t.Fatalf("expected header + 2 data rows, got %d lines:\n%s", len(lines), got)
 	}
 
-	got := render(t, rows, []Row{})
-
-	if strings.Contains(got, "Unclaimed") {
-		t.Error("expected no unclaimed section")
+	// PROCESS column must start at the same position in both data rows
+	pos0 := strings.Index(lines[1], "nginx")
+	pos1 := strings.Index(lines[2], "python")
+	if pos0 != pos1 {
+		t.Errorf("PROCESS column misaligned: row1=%d, row2=%d\n%s", pos0, pos1, got)
 	}
 }
 
-func TestRenderTable_FilterProject(t *testing.T) {
+func TestRenderTable_NoColor(t *testing.T) {
 	rows := []Row{
-		{Port: "3000", Project: "myapp", Service: "frontend", Status: StatusStopped},
-		{Port: "3001", Project: "myapp", Service: "api", Status: StatusStopped},
+		{Port: "3000", PID: 1234, Process: "node"},
 	}
+	got := render(t, rows)
 
-	got := render(t, rows, nil)
-
-	if strings.Contains(got, "otherapp") {
-		t.Error("expected otherapp to be absent from output")
-	}
-	if strings.Count(got, "myapp") < 2 {
-		t.Errorf("expected 2 myapp rows, got:\n%s", got)
+	if strings.Contains(got, "\x1b[") {
+		t.Error("expected no ANSI escape codes with noColor=true")
 	}
 }
 
-func TestRenderTable_FlagActive(t *testing.T) {
+func TestRenderJSON_ValidArray(t *testing.T) {
 	rows := []Row{
-		{Port: "3000", Project: "myapp", Service: "frontend", Status: StatusRunning},
+		{Port: "3000", PID: 1234, Process: "node", CWD: "/home/user/myapp"},
 	}
-
-	got := render(t, rows, nil)
-
-	if !strings.Contains(got, "● running") {
-		t.Error("expected running row in output")
-	}
-	if strings.Contains(got, "○ stopped") {
-		t.Error("expected no stopped rows")
-	}
-}
-
-func TestRenderTable_FlagFree(t *testing.T) {
-	rows := []Row{
-		{Port: "3001", Project: "myapp", Service: "api", Status: StatusStopped},
-	}
-
-	got := render(t, rows, nil)
-
-	if !strings.Contains(got, "○ stopped") {
-		t.Error("expected stopped row in output")
-	}
-	if strings.Contains(got, "● running") {
-		t.Error("expected no running rows")
-	}
-}
-
-func TestRenderTable_FlagUnclaimed(t *testing.T) {
-	unclaimed := []Row{{Port: "8080"}}
-
-	got := render(t, []Row{}, unclaimed)
-
-	if !strings.Contains(got, "8080") {
-		t.Errorf("expected unclaimed port 8080, got: %q", got)
-	}
-}
-
-func TestRenderTable_JSON(t *testing.T) {
-	rows := []Row{
-		{
-			Port:        "3000",
-			Project:     "myapp",
-			Service:     "frontend",
-			Status:      StatusStopped,
-			Description: "Next.js",
-		},
-		{Port: "3001", Project: "myapp", Service: "api", Status: StatusRunning},
-	}
-	unclaimed := []Row{{Port: "8080"}}
-
-	got := renderJSON(t, rows, unclaimed)
+	got := renderJSON(t, rows)
 
 	var parsed []map[string]interface{}
 	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
 		t.Fatalf("output is not valid JSON: %v\n%s", err, got)
 	}
-	if len(parsed) != 3 {
-		t.Fatalf("expected 3 entries (2 rows + 1 unclaimed), got %d", len(parsed))
+	if len(parsed) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(parsed))
 	}
 }
 
-func TestRenderTable_JSON_Fields(t *testing.T) {
+func TestRenderJSON_Fields(t *testing.T) {
 	rows := []Row{
-		{
-			Port:        "3000",
-			Project:     "myapp",
-			Service:     "frontend",
-			Status:      StatusRunning,
-			Description: "Next.js",
-		},
+		{Port: "3000", PID: 1234, Process: "node", CWD: "/home/user/myapp"},
 	}
-
-	got := renderJSON(t, rows, nil)
+	got := renderJSON(t, rows)
 
 	var parsed []map[string]interface{}
 	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
@@ -193,45 +129,40 @@ func TestRenderTable_JSON_Fields(t *testing.T) {
 	}
 
 	row := parsed[0]
-	for _, field := range []string{"port", "project", "service", "status", "description"} {
+	for _, field := range []string{"port", "pid", "process", "cwd"} {
 		if _, ok := row[field]; !ok {
-			t.Errorf("expected field %q in JSON output", field)
+			t.Errorf("expected field %q in JSON, got: %v", field, row)
 		}
 	}
-	if row["status"] != "running" {
-		t.Errorf("expected status 'running', got %v", row["status"])
+	if row["port"] != "3000" {
+		t.Errorf("expected port '3000', got %v", row["port"])
 	}
 }
 
-func TestRenderTable_NoColor(t *testing.T) {
-	rows := []Row{
-		{Port: "3000", Project: "myapp", Service: "frontend", Status: StatusRunning},
+func TestRenderJSON_EmptyArray(t *testing.T) {
+	got := renderJSON(t, []Row{})
+
+	var parsed []map[string]interface{}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatalf("expected valid JSON array, got: %v", err)
 	}
-
-	got := render(t, rows, nil)
-
-	if strings.Contains(got, "\x1b[") {
-		t.Error("expected no ANSI escape codes in no-color output")
+	if len(parsed) != 0 {
+		t.Errorf("expected empty array, got %d entries", len(parsed))
 	}
 }
 
-func TestRenderTable_ColumnAlignment(t *testing.T) {
+func TestRenderJSON_MultipleRows(t *testing.T) {
 	rows := []Row{
-		{Port: "80", Project: "myapp", Service: "frontend", Status: StatusStopped},
-		{Port: "30000", Project: "myapp", Service: "api", Status: StatusStopped},
+		{Port: "3000", PID: 1234, Process: "node", CWD: "/a"},
+		{Port: "8080", PID: 5678, Process: "python", CWD: "/b"},
 	}
+	got := renderJSON(t, rows)
 
-	got := render(t, rows, nil)
-	lines := strings.Split(strings.TrimSpace(got), "\n")
-
-	if len(lines) < 3 {
-		t.Fatalf("expected header + 2 data rows, got %d lines", len(lines))
+	var parsed []map[string]interface{}
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatal(err)
 	}
-
-	// STATUS column must start at the same position in both data rows
-	pos0 := strings.Index(lines[1], "○")
-	pos1 := strings.Index(lines[2], "○")
-	if pos0 != pos1 {
-		t.Errorf("status column misaligned: row1 pos=%d, row2 pos=%d\n%s", pos0, pos1, got)
+	if len(parsed) != 2 {
+		t.Errorf("expected 2 entries, got %d", len(parsed))
 	}
 }

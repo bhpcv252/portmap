@@ -11,7 +11,7 @@ var noColor bool
 
 var root = &cobra.Command{
 	Use:           "portmap",
-	Short:         "A local port registry for developers",
+	Short:         "Show and manage active ports",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -33,16 +33,9 @@ func init() {
 	root.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable color output")
 	root.AddCommand(
 		versionCmd,
-		claimCmd,
-		freeCmd,
 		lsCmd,
 		checkCmd,
-		killCmd,
 		suggestCmd,
-		syncCmd,
-		exportCmd,
-		cleanCmd,
-		initCmd,
-		watchCmd,
+		killCmd,
 	)
 }

@@ -20,7 +20,6 @@ func (d *windowsDetector) ActivePorts() ([]ActivePort, error) {
 	}
 	entries := parseNetstatOutput(string(netOut))
 
-	// Build PID list to batch the tasklist lookup.
 	pids := make(map[int]bool)
 	for _, e := range entries {
 		pids[e.pid] = true
@@ -33,6 +32,8 @@ func (d *windowsDetector) ActivePorts() ([]ActivePort, error) {
 			Port:    e.port,
 			PID:     e.pid,
 			Process: names[e.pid],
+			// CWD on Windows requires WMI or P/Invoke; not implemented, sorry
+			// please feel free to open a PR
 		})
 	}
 	return ports, nil
@@ -56,12 +57,10 @@ type netstatEntry struct {
 	pid  int
 }
 
-// parseNetstatOutput parses netstat -ano output, keeping only LISTENING rows
 func parseNetstatOutput(output string) []netstatEntry {
 	var entries []netstatEntry
 	for _, line := range strings.Split(output, "\n") {
 		fields := strings.Fields(line)
-		// expected: Proto LocalAddr ForeignAddr State PID
 		if len(fields) < 5 {
 			continue
 		}
@@ -81,7 +80,6 @@ func parseNetstatOutput(output string) []netstatEntry {
 	return entries
 }
 
-// tasklistNames runs tasklist and returns a map of PID → process name
 func tasklistNames(pids map[int]bool) map[int]string {
 	names := make(map[int]string)
 	out, err := exec.Command("tasklist", "/FO", "CSV", "/NH").Output()
@@ -91,11 +89,9 @@ func tasklistNames(pids map[int]bool) map[int]string {
 	return parseTasklist(string(out), pids)
 }
 
-// parseTasklist parses CSV tasklist output into a PID→name map
 func parseTasklist(output string, pids map[int]bool) map[int]string {
 	names := make(map[int]string)
 	for _, line := range strings.Split(output, "\n") {
-		// CSV format: "Image Name","PID","Session Name","Session#","Mem Usage"
 		parts := strings.Split(line, ",")
 		if len(parts) < 2 {
 			continue
@@ -113,7 +109,6 @@ func parseTasklist(output string, pids map[int]bool) map[int]string {
 	return names
 }
 
-// extractPort pulls the port from "0.0.0.0:3000" or "[::]:3000"
 func extractPort(addr string) (int, error) {
 	idx := strings.LastIndex(addr, ":")
 	if idx < 0 {

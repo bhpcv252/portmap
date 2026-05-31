@@ -16,20 +16,28 @@ func New() Detector { return &linuxDetector{} }
 
 func (d *linuxDetector) ActivePorts() ([]ActivePort, error) {
 	var ports []ActivePort
+	seen := make(map[int]bool) // deduplicate ports that appear in both tcp and tcp6
 
 	for _, path := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			continue // file may not exist on all kernels
+			continue
 		}
 		entries := parseProcNetTCP(string(data))
 		for _, e := range entries {
+			if seen[e.port] {
+				continue
+			}
+			seen[e.port] = true
+
 			pid, _ := mapInodeToPID(e.inode, "/proc")
 			proc := ""
+			cwd := ""
 			if pid > 0 {
 				proc = readComm(pid)
+				cwd = readCWD(pid)
 			}
-			ports = append(ports, ActivePort{Port: e.port, PID: pid, Process: proc})
+			ports = append(ports, ActivePort{Port: e.port, PID: pid, Process: proc, CWD: cwd})
 		}
 	}
 	return ports, nil
@@ -53,20 +61,17 @@ type netEntry struct {
 	inode string
 }
 
-// parseProcNetTCP parses the content of /proc/net/tcp or /proc/net/tcp6
-// only rows with state 0A (LISTEN) are returned
 func parseProcNetTCP(content string) []netEntry {
 	var entries []netEntry
 	lines := strings.Split(content, "\n")
-	for _, line := range lines[1:] { // skip header
+	for _, line := range lines[1:] {
 		fields := strings.Fields(line)
 		if len(fields) < 10 {
 			continue
 		}
-		if fields[3] != "0A" { // 0A = TCP_LISTEN
+		if fields[3] != "0A" {
 			continue
 		}
-		// local_address field: "XXXXXXXX:XXXX" (hex IP:hex port)
 		parts := strings.Split(fields[1], ":")
 		if len(parts) < 2 {
 			continue
@@ -81,7 +86,6 @@ func parseProcNetTCP(content string) []netEntry {
 	return entries
 }
 
-// mapInodeToPID scans /proc/[pid]/fd/ symlinks to find which PID owns the socket inode
 func mapInodeToPID(inode, procRoot string) (int, error) {
 	target := fmt.Sprintf("socket:[%s]", inode)
 
@@ -95,12 +99,12 @@ func mapInodeToPID(inode, procRoot string) (int, error) {
 		}
 		pid, err := strconv.Atoi(e.Name())
 		if err != nil {
-			continue // skip non-numeric dirs like "self"
+			continue
 		}
 		fdDir := filepath.Join(procRoot, e.Name(), "fd")
 		fds, err := os.ReadDir(fdDir)
 		if err != nil {
-			continue // no permission is common for other users' processes
+			continue
 		}
 		for _, fd := range fds {
 			link, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
@@ -115,11 +119,18 @@ func mapInodeToPID(inode, procRoot string) (int, error) {
 	return 0, nil
 }
 
-// readComm reads the process name from /proc/[pid]/comm
 func readComm(pid int) string {
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
+}
+
+func readCWD(pid int) string {
+	cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pid))
+	if err != nil {
+		return ""
+	}
+	return cwd
 }

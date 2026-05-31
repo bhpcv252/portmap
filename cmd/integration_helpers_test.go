@@ -5,12 +5,10 @@ package cmd
 import (
 	"bytes"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/bhpcv252/portmap/internal/detector"
-	"github.com/bhpcv252/portmap/internal/registry"
 )
 
 type testMock struct {
@@ -38,42 +36,16 @@ func (m *testMock) IsActive(port int) (bool, *detector.ActivePort, error) {
 	return false, nil, nil
 }
 
-func setupIntegration(t *testing.T) (string, func() *registry.Registry) {
+func setupMock(t *testing.T, active []detector.ActivePort) {
 	t.Helper()
-
-	regPath := filepath.Join(t.TempDir(), "registry.json")
-	registryPathOverride = regPath
-	det = nil
-
+	det = &testMock{ports: active}
 	t.Cleanup(func() {
-		registryPathOverride = ""
 		det = nil
 		resetCmdFlags()
 		out = os.Stdout
 		errOut = os.Stderr
 		in = os.Stdin
-		cwdOverride = ""
 	})
-
-	reload := func() *registry.Registry {
-		t.Helper()
-		r, err := registry.Load(regPath)
-		if err != nil {
-			t.Fatalf("reload registry: %v", err)
-		}
-		return r
-	}
-	return regPath, reload
-}
-
-func setupIntegrationWithMock(
-	t *testing.T,
-	active []detector.ActivePort,
-) (string, func() *registry.Registry) {
-	t.Helper()
-	regPath, reload := setupIntegration(t)
-	det = &testMock{ports: active}
-	return regPath, reload
 }
 
 func captureOutput(t *testing.T) (stdout, stderr *bytes.Buffer) {
@@ -90,34 +62,9 @@ func injectStdin(t *testing.T, s string) {
 	in = strings.NewReader(s)
 }
 
-func seedRegistry(t *testing.T, regPath string, claims map[string]registry.Claim) {
-	t.Helper()
-	r, err := registry.Load(regPath)
-	if err != nil {
-		t.Fatalf("seedRegistry load: %v", err)
-	}
-	for port, c := range claims {
-		r.Set(port, c)
-	}
-	if err := r.Save(regPath); err != nil {
-		t.Fatalf("seedRegistry save: %v", err)
-	}
-}
-
 func resetCmdFlags() {
-	claimProject, claimService, claimDesc = "", "", ""
-	claimForce = false
-	freeForce = false
-	lsProject = ""
-	lsActive, lsFree, lsUnclaimed, lsJSON = false, false, false, false
+	lsJSON = false
 	noColor = false
 	killYes = false
 	suggestFrom, suggestTo, suggestCount = 3000, 9999, 1
-	syncDryRun, syncForce = false, false
-	exportProject, exportOutput, exportStdout = "", "./portmap.toml", false
-	cleanDryRun, cleanYes = false, false
-	watchProject = ""
-	watchInterval = 5
-	watchNotify = false
-	watchCtxOverride = nil
 }

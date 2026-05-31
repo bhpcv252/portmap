@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/bhpcv252/portmap/internal/iohelp"
-	"github.com/bhpcv252/portmap/internal/registry"
 )
 
 var (
@@ -20,6 +19,7 @@ var (
 var suggestCmd = &cobra.Command{
 	Use:   "suggest",
 	Short: "Suggest an available port in a range",
+	Args:  cobra.NoArgs,
 	RunE:  runSuggest,
 }
 
@@ -30,11 +30,6 @@ func init() {
 }
 
 func runSuggest(cmd *cobra.Command, args []string) error {
-	r, err := registry.Load(getRegistryPath())
-	if err != nil {
-		return err
-	}
-
 	activePorts, err := getDetector().ActivePorts()
 	if err != nil {
 		return err
@@ -45,22 +40,10 @@ func runSuggest(cmd *cobra.Command, args []string) error {
 	}
 
 	var suggested []int
-	var skipped []string
-
 	for port := suggestFrom; port <= suggestTo && len(suggested) < suggestCount; port++ {
-		portStr := strconv.Itoa(port)
-		if claim := r.GetClaim(portStr); claim != nil {
-			skipped = append(
-				skipped,
-				fmt.Sprintf("%d claimed by %s/%s", port, claim.Project, claim.Service),
-			)
-			continue
+		if !activeSet[port] {
+			suggested = append(suggested, port)
 		}
-		if activeSet[port] {
-			skipped = append(skipped, fmt.Sprintf("%d active (unclaimed)", port))
-			continue
-		}
-		suggested = append(suggested, port)
 	}
 
 	ew := &iohelp.ErrWriter{W: out}
@@ -82,13 +65,8 @@ func runSuggest(cmd *cobra.Command, args []string) error {
 		}
 		ew.Printf("suggested ports: %s\n", strings.Join(parts, ", "))
 		if len(suggested) < suggestCount {
-			ew.Printf("note: only %d port(s) available in range %d-%d\n", len(suggested), suggestFrom, suggestTo)
-		}
-	}
-
-	if len(skipped) > 0 {
-		for _, reason := range skipped {
-			ew.Printf("(%s)\n", reason)
+			ew.Printf("note: only %d port(s) available in range %d-%d\n",
+				len(suggested), suggestFrom, suggestTo)
 		}
 	}
 

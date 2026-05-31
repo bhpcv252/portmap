@@ -6,8 +6,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/bhpcv252/portmap/internal/detector"
+	"github.com/bhpcv252/portmap/internal/display"
 	"github.com/bhpcv252/portmap/internal/iohelp"
-	"github.com/bhpcv252/portmap/internal/registry"
 )
 
 var killYes bool
@@ -20,7 +20,7 @@ var killCmd = &cobra.Command{
 }
 
 func init() {
-	killCmd.Flags().BoolVarP(&killYes, "yes", "y", false, "Skip confirmation prompt")
+	killCmd.Flags().BoolVarP(&killYes, "yes", "y", false, "Skip confirmation")
 }
 
 func runKill(cmd *cobra.Command, args []string) error {
@@ -43,28 +43,23 @@ func runKill(cmd *cobra.Command, args []string) error {
 		return errSilent
 	}
 
-	r, err := registry.Load(getRegistryPath())
-	if err != nil {
-		return err
-	}
-
-	// show process and claim info before prompting
+	nc := display.NoColorEnabled(noColor)
 	ew := &iohelp.ErrWriter{W: out}
-	ew.Printf("port %s is being used by:\n", port)
+	ew.Printf("port %s  %s\n", port, display.RenderRunning(nc))
 	ew.Printf("  pid:      %d\n", ap.PID)
 	if ap.Process != "" {
 		ew.Printf("  process:  %s\n", ap.Process)
 	}
-	if claim := r.GetClaim(port); claim != nil {
-		ew.Printf("  project:  %s/%s (claimed)\n", claim.Project, claim.Service)
+	if ap.CWD != "" {
+		ew.Printf("  cwd:      %s\n", ap.CWD)
 	}
-	ew.Printf("\n")
+	ew.Println("")
 	if ew.Err != nil {
 		return ew.Err
 	}
 
 	if !killYes {
-		yes, err := confirm(fmt.Sprintf("kill process %d?", ap.PID))
+		yes, err := confirm(fmt.Sprintf("kill process on port %s?", port))
 		if err != nil {
 			return err
 		}
@@ -78,6 +73,6 @@ func runKill(cmd *cobra.Command, args []string) error {
 	}
 
 	ew2 := &iohelp.ErrWriter{W: out}
-	ew2.Printf("process %d killed. port %s is now free.\n", ap.PID, port)
+	ew2.Printf("killed pid %d\n", ap.PID)
 	return ew2.Err
 }

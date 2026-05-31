@@ -1,4 +1,4 @@
-# portmap
+# Portmap
 
 A small CLI for seeing what's running on your ports.
 
@@ -17,11 +17,20 @@ PORT   PID    PROCESS  CWD
 
 ## Install
 
+**Homebrew (macOS/Linux):**
+
+```bash
+brew tap bhpcv252/portmap
+brew install portmap
+```
+
+**Go:**
+
 ```bash
 go install github.com/bhpcv252/portmap@latest
 ```
 
-Or clone and build:
+**From source:**
 
 ```bash
 git clone https://github.com/bhpcv252/portmap

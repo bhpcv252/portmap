@@ -1,0 +1,44 @@
+project_name: portmap
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - name: portmap
+    repository:
+      owner: bhpcv252
+      name: homebrew-portmap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/bhpcv252/portmap
+    description: See what is running on your ports
+    license: MIT
+    install: |
+      bin.install "portmap"
+    test: |
+      system "#{bin}/portmap version"
